@@ -6,7 +6,7 @@ This file creates your application.
 """
 
 from app import app, db
-from flask import render_template, request, jsonify, send_file, current_app
+from flask import render_template, request, jsonify, send_file, current_app, send_from_directory
 import os
 
 from werkzeug.utils import secure_filename
@@ -29,23 +29,19 @@ def movies():
     
     # Check if the form passes validation
     if form.validate_on_submit():
-        # 1. Get the data from the form
         title = form.title.data
         description = form.description.data
         poster = form.poster.data
         
-        # 2. Secure the filename and save the file to the uploads folder
+
         filename = secure_filename(poster.filename)
         
-        # Assuming you have an UPLOAD_FOLDER configured in your app config
         poster.save(os.path.join(app.config['UPLOAD_FOLDER'], filename))
         
-        # 3. Create a new Movie object and save it to the database
         new_movie = Movie(title=title, description=description, poster=filename)
         db.session.add(new_movie)
         db.session.commit()
         
-        # 4. Return the success JSON response
         return jsonify({
             "message": "Movie Successfully added",
             "title": title,
@@ -57,6 +53,33 @@ def movies():
     return jsonify({
         "errors": form_errors(form)
     }), 400
+
+
+from flask_wtf.csrf import generate_csrf
+
+@app.route('/api/v1/csrf-token', methods=['GET'])
+def get_csrf():
+    return jsonify({'csrf_token': generate_csrf()})
+
+@app.route('/api/v1/movies', methods=['GET'])
+def add_movies():
+    # Query all movies from the database
+    movies = db.session.execute(db.select(Movie)).scalars().all()
+    
+    movies_list = []
+    for movie in movies:
+        movies_list.append({
+            "id": movie.id,
+            "title": movie.title,
+            "description": movie.description,
+            "poster": f"/api/v1/posters/{movie.poster}"
+        })
+        
+    return jsonify({"movies": movies_list})
+
+@app.route('/api/v1/posters/<filename>')
+def get_poster(filename):
+    return send_from_directory(os.path.join(os.getcwd(), app.config['UPLOAD_FOLDER']), filename)
 ###
 # The functions below should be applicable to all Flask apps.
 ###
